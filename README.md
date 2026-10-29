@@ -8,10 +8,117 @@ Language: C
 
 
 
+TASK 1-DATA ITEMS , CONSTANTS , RULES AND TEXT VS INTEGER READINGS
+task1.c
+
+#include <stdio.h>
+#include <string.h>
+
+/* Constants: values that never change during a run */
+#define SLAB1_UNITS 100
+#define SLAB2_UNITS 200
+#define RATE2_PAISE 225
+#define RATE3_PAISE 450
+#define FIXED_CHARGE_PAISE 5000L
+
+typedef unsigned short meter_t;      /* 16-bit meter register */
+
+long compute_bill(int units)
+{
+    long paise = FIXED_CHARGE_PAISE;
+    if (units > SLAB2_UNITS) {
+        paise += (long)(units - SLAB2_UNITS) * RATE3_PAISE;
+        units = SLAB2_UNITS;
+    }
+    if (units > SLAB1_UNITS)
+        paise += (long)(units - SLAB1_UNITS) * RATE2_PAISE;
+    return paise;
+}
+
+/* Alternative: reading stored as text, converted digit by digit: O(d) */
+int text_to_number(const char *s, int *steps)
+{
+    int value = 0;
+    *steps = 0;
+    while (*s) {
+        value = value * 10 + (*s - '0');
+        (*steps)++;
+        s++;
+    }
+    return value;
+}
+
+int main(void)
+{
+    /* Data items: inputs */
+    int household = 101;             /* number, never negative */
+    char category = 'D';             /* D = domestic, C = commercial */
+    meter_t previous = 65400;        /* 16-bit counter */
+    meter_t current = 120;           /* rolled over */
+
+    /* Data items: outputs */
+    unsigned int units;              /* never negative */
+    long energy, fixed, total;       /* money in paise (whole numbers) */
+
+    units = (meter_t)(current - previous);
+    fixed = FIXED_CHARGE_PAISE;
+    total = compute_bill((int)units);
+    energy = total - fixed;
+
+    printf("Household %d, category %c\n", household, category);
+    printf("Units  = %u\n", units);
+    printf("Fixed  = Rs %ld.%02ld\n", fixed / 100, fixed % 100);
+    printf("Energy = Rs %ld.%02ld\n", energy / 100, energy % 100);
+    printf("Total  = Rs %ld.%02ld\n", total / 100, total % 100);
+
+    /* Rules every correct bill must satisfy */
+    printf("\nRule 1: bill never negative     : %s\n", total >= 0 ? "PASS" : "FAIL");
+    printf("Rule 2: total = fixed + energy  : %s\n", total == fixed + energy ? "PASS" : "FAIL");
+    printf("Rule 3: units never negative    : %s\n", (int)units >= 0 ? "PASS" : "FAIL");
+    printf("Rule 4: total >= fixed charge   : %s\n", total >= fixed ? "PASS" : "FAIL");
+
+    /* Which values can be large: district total */
+    printf("\nmax bill for 5000 units       : %ld paise\n", compute_bill(5000));
+    printf("district (800000 houses) max   : %lld paise (needs long long)\n",
+           800000LL * compute_bill(5000));
+
+    /* Alternative: readings as text vs integer */
+    {
+        const char *text = "01530";
+        int steps;
+        int number = text_to_number(text, &steps);
+        printf("\nText \"%s\": %d bytes (d+1), conversion took %d steps (d digits)\n",
+               text, (int)strlen(text) + 1, steps);
+        printf("Integer %d : %d bytes, no conversion needed, compare in 1 step\n",
+               number, (int)sizeof(meter_t));
+    }
+    return 0;
+}
+Compile command: gcc Task01/task01.c -o task01
+
+Run command: ./task01 (Linux/macOS) or .\task01.exe (Windows PowerShell)
 
 
+### Task 1 Output
+```
+Household 101, category D
+Units  = 256
+Fixed  = Rs 50.00
+Energy = Rs 477.00
+Total  = Rs 527.00
 
+Rule 1: bill never negative     : PASS
+Rule 2: total = fixed + energy  : PASS
+Rule 3: units never negative    : PASS
+Rule 4: total >= fixed charge   : PASS
 
+max bill for 5000 units       : 2187500 paise
+district (800000 houses) max   : 1750000000000 paise (needs long long)
+
+Text "01530": 6 bytes (d+1), conversion took 5 steps (d digits)
+Integer 1530 : 2 bytes, no conversion needed, compare in 1 step
+```
+<img task1.c output screenshot />
 
 TASK 2-DATA TYPES
 task2.c
@@ -514,6 +621,84 @@ too large              0          0          PASS
 5 bills hand total = 148750 paise, program = 148750  PASS
 Loop version matches if-version for 0..1000 units
 <img task9.c output />
+
+TASK 10-EXPECTED VS ACTUAL
+task10.c
+#include <stdio.h>
+#include <limits.h>
+
+#define FIXED 5000L
+
+long long bill(int units)
+{
+    long long p = FIXED;
+    if (units > 200) { p += (long long)(units - 200) * 450; units = 200; }
+    if (units > 100) { p += (long long)(units - 100) * 225; }
+    return p;
+}
+
+int main(void)
+{
+    long n[3] = {4000, 60000, 800000};
+    int k;
+    long i;
+    double big = 9007199254740992.0;      /* 2^53 */
+
+    printf("%-8s %-16s %-16s %-12s %-10s\n", "Bills", "Paise total", "Float total", "Diff (Rs)", "int/long?");
+    for (k = 0; k < 3; k++) {
+        long long total = 0;
+        float ftotal = 0;
+        double dtotal = 0;
+        for (i = 0; i < n[k]; i++) {
+            long long b = bill((int)(i % 400));
+            total += b;
+            ftotal += (float)b / 100.0f;
+            dtotal += (double)b;
+        }
+        printf("%-8ld %lld.%02lld  %-16.2f %-12.2f int:%s long(%d bytes):%s\n",
+               n[k], total / 100, total % 100, ftotal, ftotal - (double)total / 100.0,
+               total > INT_MAX ? "OVERFLOW" : "ok",
+               (int)sizeof(long), total > LONG_MAX ? "OVERFLOW" : "ok");
+        printf("         double paise total = %.0f, long long = %lld  -> %s\n",
+               dtotal, total, dtotal == (double)total ? "equal" : "DIFFERENT");
+    }
+
+    printf("\nsizeof on this system vs C standard minimum\n");
+    printf("short     : %d bytes (min 2)\n", (int)sizeof(short));
+    printf("int       : %d bytes (min 2)\n", (int)sizeof(int));
+    printf("long      : %d bytes (min 4)\n", (int)sizeof(long));
+    printf("long long : %d bytes (min 8)\n", (int)sizeof(long long));
+    printf("INT_MAX = %d, LLONG_MAX = %lld\n", INT_MAX, LLONG_MAX);
+
+    printf("\ndouble loses accuracy after 2^53 = %.0f\n", big);
+    printf("2^53 + 1 in double = %.0f (the +1 is lost)\n", big + 1.0);
+    return 0;
+}
+Compile command: gcc Task10/task10.c -o task10
+
+Run command: ./task10 (Linux/macOS) or .\task10.exe (Windows PowerShell)
+//OUT OF THE CODE
+
+Bills    Paise total      Float total      Diff (Rs)    int/long? 
+4000     1656875.00  1656875.00       0.00         int:ok long(8 bytes):ok
+         double paise total = 165687500, long long = 165687500  -> equal
+60000    24853125.00  24846614.00      -6511.00     int:OVERFLOW long(8 bytes):ok
+         double paise total = 2485312500, long long = 2485312500  -> equal
+800000   331375000.00  331515424.00     140424.00    int:OVERFLOW long(8 bytes):ok
+         double paise total = 33137500000, long long = 33137500000  -> equal
+
+sizeof on this system vs C standard minimum
+short     : 2 bytes (min 2)
+int       : 4 bytes (min 2)
+long      : 8 bytes (min 4)
+long long : 8 bytes (min 8)
+INT_MAX = 2147483647, LLONG_MAX = 9223372036854775807
+
+double loses accuracy after 2^53 = 9007199254740992
+2^53 + 1 in double = 9007199254740992 (the +1 is lost)
+<img task10.c output screenshot />
+
+
 
 TASK 11-FINAL DECISION
 task11.c
